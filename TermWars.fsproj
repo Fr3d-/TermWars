@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Extensions.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Terminal.fs" />
+    <Compile Include="Fields.fs" />
+    <Compile Include="Entities.fs" />
+    <Compile Include="Parser.fs" />
+    <Compile Include="World.fs" />
+    <Compile Include="InfoPanel.fs" />
+    <Compile Include="Controls.fs" />
+    <Compile Include="Game.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+</Project>
