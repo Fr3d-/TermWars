@@ -7,7 +7,7 @@ type Team =
 
 type FieldKind =
     | Grass
-    | Sea
+    | Water
     | Mountain
     | Tree
     | RoadV

@@ -15,25 +15,15 @@ let updatePosition (world : World.World) key =
     let newPos = Vec2.add dirVec cursor
 
     if newPos |> world.IsWithinBounds then
-        let unsetSquare =
-            world.[cursor]
-            |> World.setNone
-
-        world.[cursor] <- unsetSquare
-
-        let setSquare =
-            world.[newPos]
-            |> World.setMarked
-        
-        world.[newPos] <- setSquare
-
+        world.[cursor] <- {world.[cursor] with cursor = false}
+        world.[newPos] <- {world.[newPos] with cursor = true}
         cursor <- newPos
 
-let handleControl world keyOpt =
+let handleControl (world : World.World) keyOpt =
     match keyOpt with
         | Some key ->
             match key with
             | 'h' | 'j' | 'k' | 'l' -> updatePosition world key
-            | _ -> ()
+            | 'x' -> world.Select cursor
         | None -> ()
         

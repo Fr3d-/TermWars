@@ -6,7 +6,7 @@ let parse (tokens: char []) =
     let parseField = function
         | 'G' -> Grass
         | 'M' -> Mountain
-        | 'S' -> Sea
+        | 'S' | 'W' -> Water
         | 'T' -> Tree
         | 'V' -> RoadV
         | 'H' -> RoadH

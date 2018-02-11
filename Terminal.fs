@@ -114,6 +114,14 @@ let draw x y (fg: System.ConsoleColor) (bg:System.ConsoleColor) (symbol: string 
 
     System.Console.SetCursorPosition (0, 24)
 
+let printLine (col : System.ConsoleColor option) (s : string) =
+    match col with
+    | Some c -> Console.ForegroundColor <- c
+    | None -> Console.ResetColor ()
+
+    s.PadRight 80
+    |> printfn "%s"
+
 let flush () =
     while (Console.KeyAvailable) do
         Console.ReadKey(true) |> ignore

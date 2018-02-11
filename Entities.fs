@@ -2,7 +2,7 @@ module Entities
 open System
 
 type IMoveable =
-    abstract member Move: unit -> unit
+    abstract member MovePattern: Movement.MovementPattern
 
 type ICaptureable =
     abstract member Capture: unit -> unit
@@ -21,6 +21,17 @@ type Infantry (team) =
     
     interface IAttackable with
         member __.Health = 9
+
+    interface IMoveable with
+        member __.MovePattern =
+            array2D (
+                [|
+                    [|false; true; false|];
+                    [|true; false; true|];
+                    [|false; true; false|]
+                |]
+            )
+
 
     override __.Name = "Infantry"
     override __.Symbol = "I"

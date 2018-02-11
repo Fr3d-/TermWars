@@ -12,7 +12,7 @@ let EnumValues (enumType : System.Type) : 'a list =
     [lb .. ub] |> List.map (fun i -> values.GetValue i :?> 'a) 
 
 let world = World ()
-let infopanel = InfoPanel ()
+let infopanel = InfoPanel (world)
 
 let cols : System.ConsoleColor seq = unbox (System.Enum.GetValues(typeof<System.ConsoleColor>))
 
@@ -30,8 +30,9 @@ let rec run (state: ShowState)  counter : unit =
         else
             state
 
-    world.Draw nextState
-    infopanel.Draw key (sprintf "%A\t\t%A\t\t" nextState (world.GetMap |> List.length))
     Controls.handleControl world key
+    world.Draw nextState
+    infopanel.Draw key ("Hey")
+
     System.Threading.Thread.Sleep (10)
     run nextState (counter + 1)

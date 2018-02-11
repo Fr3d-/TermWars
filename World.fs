@@ -5,23 +5,33 @@ open Entities
 open System
 
 type SquareState =
+    // Square where X (cursor) is
     | MarkedSquare
     | AttackableSquare
     | MoveableSquare
     | NoneSquare
 
+(*
 type Square =
-    | Occupied of Field * Entity * SquareState
-    | Empty of Field * SquareState
+    | Occupied of Field * Entity * SquareState * bool
+    | Empty of Field * SquareState * bool
+*)
 
-let setSquareState squareState = function
-    | Occupied (f, e, _) -> Occupied (f, e, squareState)
-    | Empty (e, _) -> Empty (e, squareState)
+type Square = {
+    field: Field
+    entity: Entity option
+    state: SquareState
+    cursor: bool
+}
+
+let setSquareState squareState (s: Square) =
+    {s with state = squareState}
 
 let setMarked = setSquareState MarkedSquare
 let setAttackable = setSquareState AttackableSquare
 let setMoveable = setSquareState MoveableSquare
 let setNone = setSquareState NoneSquare
+let setSelected = setSquareState NoneSquare
 
 type ShowState =
     | ShowEntities
@@ -36,9 +46,19 @@ let nextState = function
 type World () as this =
     let create = function
         | OccupiedKind (fk, tk, team) ->
-            Occupied (Fields.getFieldFromKind fk, Entities.createEntityFromKind team tk, NoneSquare)
-        | EmptyKind fk -> Empty (Fields.getFieldFromKind fk, NoneSquare)
-
+            {
+                field = Fields.getFieldFromKind fk
+                entity = Some (Entities.createEntityFromKind team tk)
+                state = NoneSquare
+                cursor = false
+            }
+        | EmptyKind fk ->
+            {
+                field = Fields.getFieldFromKind fk
+                entity = None
+                state = NoneSquare
+                cursor = false
+            }
 
     let _map =
         Parser.parseFile "map.txt"
@@ -46,9 +66,10 @@ type World () as this =
 
     let getAllSquresWithEntities (m: Square [,]) =
         // Array2D coordinates is in (y, x)
-        let containsEntity y x = function
-            | Occupied _ -> Some (x, y)
-            | _ -> None
+        let containsEntity y x (s : Square) =
+            match s.entity with
+            | Some _ -> Some (x, y)
+            | None -> None
 
         m
         |> Array2D.mapi containsEntity
@@ -59,6 +80,86 @@ type World () as this =
 
     do
         this.UpdateAll ()
+
+
+
+    member this.Select (pos : Position) =
+        let unsetAllSquares () =
+            _map
+            |> Array2D.iteri (fun y x square ->
+                                match square with
+                                | {state = MoveableSquare}
+                                | {state = AttackableSquare}
+                                | {state = MarkedSquare} ->
+                                    this.[x, y] <- square |> setNone
+                                | _ -> ())
+
+
+        let s = this.[pos]
+
+        match s.entity with
+        | Some e ->
+            match s.state with
+            // Unselect if marked
+            | MarkedSquare ->
+                unsetAllSquares ()
+
+            // Attack here and set states back
+            | AttackableSquare ->
+                ()
+            
+            // Check entity, if moveable set marked.
+            | NoneSquare when e.Team = Friendly ->
+                unsetAllSquares ()
+
+                match box e with
+                | :? IMoveable as e' ->
+                    this.[pos] <- s |> setMarked
+                    
+                    pos
+                    // Get all moveable positions according to pattern
+                    |> Movement.moveablePositions e'.MovePattern
+                    // Get squares for all positions and removes out of bounds entries
+                    |> List.choose (fun ((x, y) as p) ->
+                        // TODO: Don't use exceptions, it's slow.
+                        try
+                            Some (p, Array2D.get _map y x)
+                        with
+                            | :? System.IndexOutOfRangeException -> None)
+                    // Filter all squares with entities away
+                    |> List.filter (fun (_, s) -> s.entity |> Option.isNone)
+                    // Take positions left
+                    |> List.map fst
+                    // Mark them
+                    |> List.iter (fun p -> this.[p] <- this.[p] |> setMoveable)
+
+                | _ -> ()
+                // We gotta mark all squares that can be moved to
+
+            | _ -> ()
+
+        | None ->
+            match s.state with
+            // Cannot mark empty squares
+            | MarkedSquare -> ()
+
+            // Move to there
+            | MoveableSquare ->
+                let ((y, x), fromSquare) =
+                    _map
+                    |> Array2D.indexed
+                    |> Array2D.toList
+                    |> List.find (fun (_, s) -> s.state = MarkedSquare)
+
+                this.[x, y] <- {fromSquare with entity = None}
+                this.[pos] <- {s with entity = fromSquare.entity} 
+
+                unsetAllSquares ()
+            // 
+            | AttackableSquare ->
+                ()
+
+            | _ -> ()
 
     member __.GetMap = updatedSquares
 
@@ -90,48 +191,56 @@ type World () as this =
           updatedSquares <- (x, y) :: updatedSquares
 
     member __.Draw showState =
-        let getSymbol = function
-            | Occupied (f, e, s) ->
-                match s with
-                | MarkedSquare -> Some "X"
+        let getSymbol (s : Square) =
+            match s.entity with
+            | Some e ->
+                match s.state with
+                | MarkedSquare -> Some "M"
                 | _ ->
-                    match showState with
-                    | ShowEntities -> Some e.Symbol
-                    | ShowHealth ->
-                        match box e with
-                        | :? IAttackable as e -> Some (e.Health.ToString ())
-                        | _ -> Some e.Symbol
-                    | ShowBackground ->
-                        match f.symbol with
-                        | Some symbol -> Some symbol
-                        | None -> Some e.Symbol
+                    match s.cursor with
+                    | true -> Some "X"
+                    | false ->
+                        match showState with
+                        | ShowEntities -> Some e.Symbol
+                        | ShowHealth ->
+                            match box e with
+                            | :? IAttackable as e -> Some (e.Health.ToString ())
+                            | _ -> Some e.Symbol
+                        | ShowBackground ->
+                            match s.field.symbol with
+                            | Some symbol -> Some symbol
+                            | None -> Some e.Symbol
 
-            | Empty (f, s) ->
-                match s with
-                | MarkedSquare -> Some "X"
-                | _ -> f.symbol
+            | None ->
+                match s.cursor with
+                | true -> Some "X"
+                | false -> s.field.symbol
 
-        let getFrontColor = function
-            | Occupied (f, e, s) ->
-                match s with
+        let getFrontColor (s: Square) =
+            match s.entity with
+            | Some e ->
+                match s.state with
                 | MarkedSquare -> Some ConsoleColor.White
+                | _ when s.cursor -> Some ConsoleColor.White
                 | _ ->
                     match showState with
                     | ShowEntities 
                     | ShowHealth -> Some (e.Team |> Entities.getTeamColor)
                     | ShowBackground ->
-                        match f.symbol with
-                        | Some _ -> f.fgcol
+                        match s.field.symbol with
+                        | Some _ -> s.field.fgcol
                         | None -> Some (e.Team |> Entities.getTeamColor)
 
-            | Empty (f, s) ->
-                match s with
-                | MarkedSquare -> Some ConsoleColor.White
-                | _ -> f.fgcol
+            | None ->
+                match s.state with
+                | MarkedSquare
+                | _ when s.cursor -> Some ConsoleColor.White
+                | _ -> s.field.fgcol
 
-        let getBackgroundColor = function
-            | Occupied (f, _, _) -> f.bgcol
-            | Empty (f, _) -> f.bgcol
+        let getBackgroundColor (s: Square) =
+            match s.state with
+            | MoveableSquare -> ConsoleColor.Magenta
+            | _ -> s.field.bgcol
 
         let draw x y s =
             let backgroundColor = getBackgroundColor s
