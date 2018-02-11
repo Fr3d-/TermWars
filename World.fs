@@ -94,6 +94,24 @@ type World () as this =
                                     this.[x, y] <- square |> setNone
                                 | _ -> ())
 
+        let unsetAttMove () =
+            _map
+            |> Array2D.iteri (fun y x square ->
+                                match square with
+                                | {state = MoveableSquare}
+                                | {state = AttackableSquare} ->
+                                    this.[x, y] <- square |> setNone
+                                | _ -> ())
+
+
+        let getMarkedSquare () =
+            let ((y, x), square) =
+                _map
+                |> Array2D.indexed
+                |> Array2D.toList
+                |> List.find (fun (_, s) -> s.state = MarkedSquare)
+
+            ((x, y), square)
 
         let s = this.[pos]
 
@@ -106,7 +124,18 @@ type World () as this =
 
             // Attack here and set states back
             | AttackableSquare ->
-                ()
+                let (_, attackerSquare) =
+                    getMarkedSquare ()
+
+                let attacker =
+                    attackerSquare.entity
+                    |> Option.get
+                    |> coerce
+                
+                attacker
+                |> Entities.attack (s.entity |> Option.get |> coerce)
+
+                unsetAllSquares ()
             
             // Check entity, if moveable set marked.
             | NoneSquare when e.Team = Friendly ->
@@ -118,14 +147,12 @@ type World () as this =
                     
                     pos
                     // Get all moveable positions according to pattern
-                    |> Movement.moveablePositions e'.MovePattern
+                    |> Movement.patternPositions e'.MovePattern
                     // Get squares for all positions and removes out of bounds entries
                     |> List.choose (fun ((x, y) as p) ->
-                        // TODO: Don't use exceptions, it's slow.
-                        try
-                            Some (p, Array2D.get _map y x)
-                        with
-                            | :? System.IndexOutOfRangeException -> None)
+                        match Array2D.tryGet _map y x with
+                        | Some square -> Some (p, square)
+                        | None -> None)
                     // Filter all squares with entities away
                     |> List.filter (fun (_, s) -> s.entity |> Option.isNone)
                     // Take positions left
@@ -140,24 +167,49 @@ type World () as this =
 
         | None ->
             match s.state with
-            // Cannot mark empty squares
-            | MarkedSquare -> ()
-
             // Move to there
             | MoveableSquare ->
-                let ((y, x), fromSquare) =
-                    _map
-                    |> Array2D.indexed
-                    |> Array2D.toList
-                    |> List.find (fun (_, s) -> s.state = MarkedSquare)
+                let (fromPos, fromSquare) =
+                    getMarkedSquare ()
 
-                this.[x, y] <- {fromSquare with entity = None}
+                this.[fromPos] <- {fromSquare with entity = None; state = NoneSquare}
                 this.[pos] <- {s with entity = fromSquare.entity} 
 
-                unsetAllSquares ()
-            // 
-            | AttackableSquare ->
-                ()
+                unsetAttMove ()
+
+                // The entity must exist, as we moved it
+                let e = fromSquare.entity |> Option.get
+
+                match box e with 
+                | :? IAttacker as e' ->
+                    let attackablePositions =
+                        pos
+                        // Get all moveable positions according to pattern
+                        |> Movement.patternPositions e'.AttackPattern
+                        // Get squares for all positions and removes out of bounds entries
+                        |> List.choose (fun ((x, y) as p) ->
+                            match Array2D.tryGet _map y x with
+                            | Some square -> Some (p, square)
+                            | None -> None)
+                        // Filter all squares without entites away and unpack entity option
+                        |> List.choose (fun (a, b) -> match b.entity with | Some e -> Some (a, e) | None -> None)
+                        // Only select enemies
+                        |> List.filter (fun (_, e') -> e.Team <> e'.Team)
+                        // Take positions left
+                        |> List.map fst
+
+                    if attackablePositions |> (List.isEmpty >> not)  then
+                        attackablePositions
+                        |> List.iter (fun p -> this.[p] <- this.[p] |> setAttackable)
+
+                        // Set the new positions as marked, as we can attack.
+                        this.[pos] <- {this.[pos] with state = MarkedSquare} 
+                    else
+                        ()
+
+                | _ ->
+                    let a =  5
+                    ()
 
             | _ -> ()
 
@@ -224,8 +276,7 @@ type World () as this =
                 | _ when s.cursor -> Some ConsoleColor.White
                 | _ ->
                     match showState with
-                    | ShowEntities 
-                    | ShowHealth -> Some (e.Team |> Entities.getTeamColor)
+                    | ShowEntities | ShowHealth -> Some (e.Team |> Entities.getTeamColor)
                     | ShowBackground ->
                         match s.field.symbol with
                         | Some _ -> s.field.fgcol
@@ -233,13 +284,14 @@ type World () as this =
 
             | None ->
                 match s.state with
-                | MarkedSquare
+                | MarkedSquare -> Some ConsoleColor.White
                 | _ when s.cursor -> Some ConsoleColor.White
                 | _ -> s.field.fgcol
 
         let getBackgroundColor (s: Square) =
             match s.state with
             | MoveableSquare -> ConsoleColor.Magenta
+            | AttackableSquare -> ConsoleColor.DarkMagenta
             | _ -> s.field.bgcol
 
         let draw x y s =

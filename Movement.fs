@@ -1,8 +1,8 @@
 module Movement
 
-type MovementPattern = bool [,]
+type Pattern = bool [,]
 
-let moveablePositions (pattern: MovementPattern) (currentPosition: Position) =
+let patternPositions (pattern: Pattern) (currentPosition: Position) =
     let helper i j canMove =
         if canMove then
             Some (j - (Array2D.length2 pattern / 2), i - (Array2D.length1 pattern / 2))
