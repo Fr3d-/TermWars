@@ -10,6 +10,8 @@ type Entity (team : Team) =
 type IMoveable =
     abstract member MovePattern: Movement.Pattern
     abstract member CanMove: bool
+    abstract member MovementPoints: int
+    abstract member MovementType: Movement.MovementType
 
 type ICaptureable =
     abstract member Capture: unit -> unit
@@ -58,6 +60,8 @@ type Infantry (team) =
                 |]
             )
 
+        member __.MovementType = Movement.Walking
+        member __.MovementPoints = 5
 
     override __.Name = "Infantry"
     override __.Symbol = "I"

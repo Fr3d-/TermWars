@@ -3,6 +3,7 @@ module World
 open Fields
 open Entities
 open System
+open Movement
 
 type SquareState =
     // Square where X (cursor) is
@@ -143,22 +144,22 @@ type World () as this =
 
                 match box e with
                 | :? IMoveable as e' ->
-                    this.[pos] <- s |> setMarked
                     
-                    pos
-                    // Get all moveable positions according to pattern
-                    |> Movement.patternPositions e'.MovePattern
-                    // Get squares for all positions and removes out of bounds entries
-                    |> List.choose (fun ((x, y) as p) ->
-                        match Array2D.tryGet _map y x with
-                        | Some square -> Some (p, square)
-                        | None -> None)
-                    // Filter all squares with entities away
-                    |> List.filter (fun (_, s) -> s.entity |> Option.isNone)
-                    // Take positions left
-                    |> List.map fst
-                    // Mark them
-                    |> List.iter (fun p -> this.[p] <- this.[p] |> setMoveable)
+                    let costMap =
+                        Array2D.copy _map
+                        |> Array2D.map (fun s' ->
+                            match s'.entity with
+                            // Squares with entities are not moveable
+                            | Some _ -> Movement.NotMoveable
+                            | None ->
+                                // Get movement cost for terrain
+                                Movement.MovementCostForTerrain e'.MovementType s'.field.kind)
+
+                    // TRANSLATION!???
+                    Movement.possibleMoves costMap pos e'.MovementPoints
+                    |> List.iter (fun (squarePos, _) -> this.[squarePos] <- this.[squarePos] |> setMoveable)
+
+                    this.[pos] <- s |> setMarked
 
                 | _ -> ()
                 // We gotta mark all squares that can be moved to

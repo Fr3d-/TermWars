@@ -3,6 +3,11 @@ module Extensions
 
 let coerce value = (box >> unbox) value
 
+module Graph =
+    type Vertex = int
+    type Cost = int
+    type Egde = Vertex * Vertex * Cost
+
 module Array2D =
     // Credit: https://stackoverflow.com/a/12871091/3641365
     let toArray (arr: 'T [,]) = arr |> Seq.cast<'T> |> Seq.toArray
@@ -14,3 +19,9 @@ module Array2D =
             Some (Array2D.get arr i j)
         else
             None
+
+    let zeroLike (arr: 'T [,]) : 'T [,] =
+        Array2D.zeroCreate (arr |> Array2D.length1) (arr |> Array2D.length2)
+
+    let createLike (arr: 'T [,]) (value: 'T) : 'T [,] =
+        Array2D.create (arr |> Array2D.length1) (arr |> Array2D.length2) value
