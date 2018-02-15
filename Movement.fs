@@ -22,17 +22,52 @@ let MovementCostForTerrain (movementType: MovementType) (terrain: FieldKind) =
         | Mountain -> 2
         | Tree -> 1
         | RoadV | RoadH -> 1
-    | _ -> raise (NotImplementedException ())
+    | Wheels ->
+        match terrain with
+        | Grass -> 2
+        | Water -> NotMoveable
+        | Mountain -> NotMoveable
+        | Tree -> NotMoveable
+        | RoadV | RoadH -> 1
+    | Threads ->
+        match terrain with
+        | Grass -> 1
+        | Water -> NotMoveable
+        | Mountain -> NotMoveable
+        | Tree -> 1
+        | RoadV | RoadH -> 1
+    | Naval ->
+        match terrain with
+        | Grass -> NotMoveable
+        | Water -> 1
+        | Mountain -> NotMoveable
+        | Tree -> NotMoveable
+        | RoadV | RoadH -> NotMoveable
+    | Flying ->
+        match terrain with
+        | Grass -> 1
+        | Water -> 1
+        | Mountain -> 1
+        | Tree -> 1
+        | RoadV | RoadH -> 1
 
-let possibleMoves (costMap: int [,]) (srcPosition: Position) (movementPoints: int) =
-    // I'm pretty sure width has to be higher than length
-    let width = Array2D.length2 costMap
-    // V is width squared
-    let V = pown width 2
+// Get all the possible moves from a costMap
+let possibleMoves (costMap: int [,]) (originalPosition: Position) (movementPoints: int) =
+    let maxCost = movementPoints
+    // Dimension for our movement matrix, from which we'll calculate paths.
+    let dim = maxCost * 2 + 1
 
-    let toVertex ((x, y) : Position) : Graph.Vertex = x + width * y
-    let toPosition (i : Graph.Vertex) : Position = (i % width, i / width)
+    // Translation so that our entity is in the middle of our movement matrix
+    let translatedX = fst originalPosition - (dim / 2)
+    let translatedY = snd originalPosition - (dim / 2)
 
+    // Size of our adjencacy matrix
+    let V = pown dim 2
+
+    let toVertex ((x, y) : Position) : Graph.Vertex = x + dim * y
+    let toPosition (i : Graph.Vertex) : Position = (i % dim, i / dim)
+
+    // Create a graph from a matrix
     let createGraph (map : int [,]) : Graph.Egde list =
         let g ((x, y) : Position) =
             Array2D.tryGet map y x
@@ -40,7 +75,6 @@ let possibleMoves (costMap: int [,]) (srcPosition: Position) (movementPoints: in
         let getNeighbours (x, y) =
             // All neighbours
             [(-1, 0); (0, -1); (1, 0); (0, 1)]
-            // From vertex, to vertex, and weight.
             |> List.map (fun (x', y') -> ((x, y) |> toVertex, (x + x', y + y') |> toVertex, g (x + x', y + y')))
             |> List.choose (fun (a, b, elem) -> match elem with | Some e -> Some (a, b, e) | None -> None)
 
@@ -49,8 +83,8 @@ let possibleMoves (costMap: int [,]) (srcPosition: Position) (movementPoints: in
         |> Array2D.toList
         |> List.concat
 
-
-    let adjacencyMatrix (graph: (Graph.Vertex * Graph.Vertex * int) list) =
+    // Create adjacency matrix from graph
+    let adjacencyMatrix V (graph: (Graph.Vertex * Graph.Vertex * int) list) =
         let matrix = Array2D.zeroCreate V V
 
         graph
@@ -58,15 +92,14 @@ let possibleMoves (costMap: int [,]) (srcPosition: Position) (movementPoints: in
 
         matrix
 
-    let minDistance (dist: int []) (sptSet: bool []) =
-        dist
-        |> Array.indexed
-        |> Array.filter (fun (i, _) -> not sptSet.[i])
-        |> Array.minBy (fun (_, v) -> v)
-        |> fst
+    let djikstra V (graph: int [,]) (src: int) =
+        let minDistance (dist : int []) (sptSet : bool []) =
+            dist
+            |> Array.indexed
+            |> Array.filter (fun (i, _) -> not sptSet.[i])
+            |> Array.minBy (fun (_, v) -> v)
+            |> fst
 
-    // Returns shortest path weight to all positions
-    let djikstra (src: Graph.Vertex) (matrix: int [,]) =
         let dist = Array.create V 999
         dist.[src] <- 0
         
@@ -78,24 +111,34 @@ let possibleMoves (costMap: int [,]) (srcPosition: Position) (movementPoints: in
             sptSet.[u] <- true
 
             for v = 0 to V - 1 do
-                if (not (sptSet.[v]) && matrix.[u, v] > 0 && dist.[u] <> 999 && dist.[u] + matrix.[u, v] < dist.[v]) then
-                    dist.[v] <- dist.[u] + matrix.[u, v]
+                if (not (sptSet.[v]) && graph.[u, v] > 0 && dist.[u] <> 999 && dist.[u] + graph.[u, v] < dist.[v]) then
+                    dist.[v] <- dist.[u] + graph.[u, v]
 
         dist
-        |> Array.mapi (fun i w ->
-            let dst = i |> toPosition
-            (dst, w))
-        |> Array.toList
-    
+            |> Array.mapi (fun i w ->
+                let dst = i |> toPosition
+                (dst, w))
+            |> Array.toList
+
+    let getLocalCostMap map =
+        Array2D.init dim dim (fun y x ->
+            match Array2D.tryGet map (translatedY + y) (translatedX + x) with
+            | Some v -> v
+            // Out of bounds is not moveable
+            | None -> NotMoveable)
+
     costMap
-    // Create graph from 2d grid
+    // Create local cost map from our position and global cost map
+    |> getLocalCostMap
+    // Create graph from local costmap
     |> createGraph
-    // Create adjencency matrix from graph
-    |> adjacencyMatrix
-    // Get costs to all other vertices from our chosen vertex.
-    |> djikstra (srcPosition |> toVertex)
-    // Filter out too expensive moves
-    |> List.filter (fun (pos, cost) -> cost <= movementPoints)
+    |> adjacencyMatrix V
+    // Run djikstras algorithm on our local costmap. Inside this map our position is in the middle (dim / 2, dim / 2)
+    |> djikstra V <| ((dim / 2, dim / 2) |> toVertex)
+    // Filter out positions that are unreachable
+    |> List.filter (fun (dst, w) -> w <= maxCost)
+    // Translate back to global coordinates
+    |> List.map (fun ((x, y), w) -> ((x - dim / 2 + (fst originalPosition), y - dim / 2 + (snd originalPosition)), w))
 
 let patternPositions (pattern: Pattern) (currentPosition: Position) =
     let helper i j canMove =
