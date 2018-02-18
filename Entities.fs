@@ -8,36 +8,43 @@ type Entity (team : Team) =
     abstract member Symbol : string
 
 type IMoveable =
-    abstract member MovePattern: Movement.Pattern
-    abstract member CanMove: bool
+    abstract member CanMove: bool with get, set
     abstract member MovementPoints: int
     abstract member MovementType: Movement.MovementType
 
 type ICaptureable =
     abstract member Capture: unit -> unit
 
-type IAttacker =
+type ICombat =
     abstract member AttackPattern: Movement.Pattern
-    abstract member AttackPower: int
-
-type IAttackable =
+    abstract member AttackPowerOn: ICombat -> int
     abstract Health : int with get, set
 
-let attack (victim: IAttackable) (attacker: IAttacker) =
-    victim.Health <- victim.Health - attacker.AttackPower
+// Returns a bool indicating if the victim died
+let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
+    let attackPower = attacker.AttackPowerOn victim |> float
+    let finalAttackPower = ((attackPower - (attackPower * victimTerrain.defensiveBonus)) * (float attacker.Health / 9.0)) |> int
+    victim.Health <- victim.Health - finalAttackPower
 
     // Don't set health below zero
     victim.Health <- max victim.Health 0
+
+    victim.Health = 0
 
 type Infantry (team) =
     inherit Entity (team)
     
     let mutable health = 9
-    interface IAttackable with
-        member __.Health with get() = health and set(v) = health <- v
+    let mutable canMove = true
 
-    interface IAttacker with
-        member __.AttackPower = 5
+    interface ICombat with
+        member __.Health with get() = health and set(v) = health <- v
+        member __.AttackPowerOn (enemy: ICombat) =
+            match enemy with
+            | :? Infantry -> 6
+            | :? Tank -> 1
+            | _ -> raise (NotImplementedException ())
+
         member __.AttackPattern =
             array2D (
                 [|
@@ -48,29 +55,23 @@ type Infantry (team) =
             )
 
     interface IMoveable with
-        member __.CanMove = true
-        member __.MovePattern =
-            array2D (
-                [|
-                    [|true; true; true;  true; true|];
-                    [|true; true; true;  true; true|];
-                    [|true; true; false; true; true|];
-                    [|true; true; true;  true; true|];
-                    [|true; true; true;  true; true|]
-                |]
-            )
-
+        member __.CanMove with get () = canMove and set(v) = canMove <- v
         member __.MovementType = Movement.Walking
-        member __.MovementPoints = 5
+        member __.MovementPoints = 3
 
     override __.Name = "Infantry"
     override __.Symbol = "I"
 
-type Tank (team) =
+and Tank (team) =
     inherit Entity (team)
 
     override __.Name = "Tank"
     override __.Symbol = "T"
+
+let isDead (entity: Entity) =
+    match box entity with
+    | :? ICombat as e -> e.Health = 0
+    | _ -> failwith "isDead only works on entities that implement ICombat" 
 
 let createEntityFromKind team = function
     | Infantry -> (Infantry team :> Entity)

@@ -125,7 +125,7 @@ type World () as this =
 
             // Attack here and set states back
             | AttackableSquare ->
-                let (_, attackerSquare) =
+                let (attackerPos, attackerSquare) =
                     getMarkedSquare ()
 
                 let attacker =
@@ -133,8 +133,24 @@ type World () as this =
                     |> Option.get
                     |> coerce
                 
-                attacker
-                |> Entities.attack (s.entity |> Option.get |> coerce)
+                // We attack
+                let victimDied = 
+                    attacker
+                    |> Entities.attack (s.entity |> Option.get |> coerce) s.field
+
+                if not victimDied then
+                    // Let the enemy counter-attack
+                    let attackerDied =
+                        s.entity
+                        |> Option.get
+                        |> coerce
+                        |> Entities.attack attacker s.field
+                    
+                    if attackerDied then
+                        this.[attackerPos] <- { this.[attackerPos] with entity = None}
+
+                else
+                    this.[pos] <- { this.[pos] with entity = None}
 
                 unsetAllSquares ()
             
@@ -143,7 +159,7 @@ type World () as this =
                 unsetAllSquares ()
 
                 match box e with
-                | :? IMoveable as e' ->
+                | :? IMoveable as e' when e'.CanMove ->
                     
                     let costMap =
                         Array2D.copy _map
@@ -155,14 +171,12 @@ type World () as this =
                                 // Get movement cost for terrain
                                 Movement.MovementCostForTerrain e'.MovementType s'.field.kind)
 
-                    // TRANSLATION!???
                     Movement.possibleMoves costMap pos e'.MovementPoints
                     |> List.iter (fun (squarePos, _) -> this.[squarePos] <- this.[squarePos] |> setMoveable)
 
                     this.[pos] <- s |> setMarked
 
                 | _ -> ()
-                // We gotta mark all squares that can be moved to
 
             | _ -> ()
 
@@ -181,8 +195,10 @@ type World () as this =
                 // The entity must exist, as we moved it
                 let e = fromSquare.entity |> Option.get
 
+                (coerce e : IMoveable).CanMove <- false
+
                 match box e with 
-                | :? IAttacker as e' ->
+                | :? ICombat as e' ->
                     let attackablePositions =
                         pos
                         // Get all moveable positions according to pattern
@@ -257,7 +273,7 @@ type World () as this =
                         | ShowEntities -> Some e.Symbol
                         | ShowHealth ->
                             match box e with
-                            | :? IAttackable as e -> Some (e.Health.ToString ())
+                            | :? ICombat as e -> Some (e.Health.ToString ())
                             | _ -> Some e.Symbol
                         | ShowBackground ->
                             match s.field.symbol with
