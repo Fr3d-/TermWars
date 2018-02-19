@@ -27,3 +27,8 @@ let getName (f : Field) =
     | Tree -> "Tree"
     | RoadV -> "Road"
     | RoadH -> "Road"
+
+let getColor (f: Field) =
+    match f.fgcol with
+    | Some c -> c
+    | None -> f.bgcol

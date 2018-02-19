@@ -1,7 +1,20 @@
 [<AutoOpen>]
 module Extensions
+open Microsoft.FSharp.Reflection
+
+// https://stackoverflow.com/a/1259500/3641365
+///Returns the case name of the object with union type 'ty.
+let getUnionCaseName (x:'a) = 
+    match FSharpValue.GetUnionFields(x, typeof<'a>) with
+    | case, _ -> case.Name  
+
+///Returns the case names of union type 'ty.
+let getUnionCaseNames<'ty> () = 
+    FSharpType.GetUnionCases(typeof<'ty>) |> Array.map (fun info -> info.Name)
 
 let coerce value = (box >> unbox) value
+
+let duplet a b = (a, b)
 
 module Graph =
     type Vertex = int

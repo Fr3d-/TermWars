@@ -15,6 +15,7 @@ let parse (tokens: char []) =
     let parseEntity = function
         | 'T' | 't' -> Some Tank
         | 'I' | 'i' -> Some Infantry
+        | 'J' | 'j' -> Some Jeep
         | 'B' | 'b' -> Some Base
         | '0' -> None
         | token -> sprintf "Invalid entity token %c" token |> failwith 

@@ -9,6 +9,7 @@
     <Compile Include="Terminal.fs" />
     <Compile Include="Fields.fs" />
     <Compile Include="Movement.fs" />
+    <Compile Include="Combat.fs" />
     <Compile Include="Entities.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="World.fs" />

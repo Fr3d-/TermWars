@@ -17,12 +17,17 @@ type ICaptureable =
 
 type ICombat =
     abstract member AttackPattern: Movement.Pattern
-    abstract member AttackPowerOn: ICombat -> int
+    abstract member Armor: Combat.ArmorType
+    abstract member Weapon: Combat.WeaponType
     abstract Health : int with get, set
 
 // Returns a bool indicating if the victim died
 let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
-    let attackPower = attacker.AttackPowerOn victim |> float
+    let attackPower =
+        attacker.Weapon
+        |> Combat.damageAgainstArmor victim.Armor
+        |> (*) 9.0
+
     let finalAttackPower = ((attackPower - (attackPower * victimTerrain.defensiveBonus)) * (float attacker.Health / 9.0)) |> int
     victim.Health <- victim.Health - finalAttackPower
 
@@ -39,11 +44,8 @@ type Infantry (team) =
 
     interface ICombat with
         member __.Health with get() = health and set(v) = health <- v
-        member __.AttackPowerOn (enemy: ICombat) =
-            match enemy with
-            | :? Infantry -> 6
-            | :? Tank -> 1
-            | _ -> raise (NotImplementedException ())
+        member __.Armor = Combat.Minimal
+        member __.Weapon = Combat.Machinegun
 
         member __.AttackPattern =
             array2D (
@@ -64,9 +66,58 @@ type Infantry (team) =
 
 and Tank (team) =
     inherit Entity (team)
+    
+    let mutable health = 9
+    let mutable canMove = true
+
+    interface ICombat with
+        member __.Health with get() = health and set(v) = health <- v
+        member __.Armor = Combat.Medium
+        member __.Weapon = Combat.Rockets
+
+        member __.AttackPattern =
+            array2D (
+                [|
+                    [|false; true; false|];
+                    [|true; false; true|];
+                    [|false; true; false|]
+                |]
+            )
+
+    interface IMoveable with
+        member __.CanMove with get () = canMove and set(v) = canMove <- v
+        member __.MovementType = Movement.Threads
+        member __.MovementPoints = 5
 
     override __.Name = "Tank"
     override __.Symbol = "T"
+and Jeep (team) =
+    inherit Entity (team)
+    
+    let mutable health = 9
+    let mutable canMove = true
+
+    interface ICombat with
+        member __.Health with get() = health and set(v) = health <- v
+        member __.Armor = Combat.Light
+        member __.Weapon = Combat.Machinegun
+
+        member __.AttackPattern =
+            array2D (
+                [|
+                    [|false; true; false|];
+                    [|true; false; true|];
+                    [|false; true; false|]
+                |]
+            )
+
+    interface IMoveable with
+        member __.CanMove with get () = canMove and set(v) = canMove <- v
+        member __.MovementType = Movement.Wheels
+        member __.MovementPoints = 6
+
+    override __.Name = "Jeep"
+    override __.Symbol = "J"
 
 let isDead (entity: Entity) =
     match box entity with
@@ -75,6 +126,7 @@ let isDead (entity: Entity) =
 
 let createEntityFromKind team = function
     | Infantry -> (Infantry team :> Entity)
+    | Jeep -> (Jeep team :> Entity)
     | Tank -> (Tank team :> Entity)
     | _ -> raise (NotImplementedException ())
 

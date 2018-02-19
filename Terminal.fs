@@ -114,13 +114,26 @@ let draw x y (fg: System.ConsoleColor) (bg:System.ConsoleColor) (symbol: string 
 
     System.Console.SetCursorPosition (0, 24)
 
-let printLine (col : System.ConsoleColor option) (s : string) =
-    match col with
-    | Some c -> Console.ForegroundColor <- c
-    | None -> Console.ResetColor ()
+let print (bg: System.ConsoleColor option) (fg: System.ConsoleColor option) (s : string) =
+    match (fg, bg) with
+    | (Some fg, Some bg) -> 
+        Console.ForegroundColor <- fg
+        Console.BackgroundColor <- bg
+    | (None, Some bg) ->
+        Console.ResetColor ()
+        Console.BackgroundColor <- bg
+    | (Some fg, None) ->
+        Console.ResetColor ()
+        Console.ForegroundColor <- fg
+    | (None, None) ->
+        Console.ResetColor ()
 
-    s.PadRight 80
-    |> printfn "%s"
+    s
+    |> printf "%s"
+
+let printDefault = print None None
+let printWithBackground bg = print (Some bg) None
+let printWithForeground fg = print None (Some fg)
 
 let flush () =
     while (Console.KeyAvailable) do

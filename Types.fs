@@ -15,6 +15,7 @@ type FieldKind =
 
 type EntityKind =
     | Infantry
+    | Jeep
     | Tank
     | Base
 

@@ -34,7 +34,7 @@ let MovementCostForTerrain (movementType: MovementType) (terrain: FieldKind) =
         | Grass -> 1
         | Water -> NotMoveable
         | Mountain -> NotMoveable
-        | Tree -> 1
+        | Tree -> 2
         | RoadV | RoadH -> 1
     | Naval ->
         match terrain with

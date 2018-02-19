@@ -7,10 +7,10 @@ open Movement
 
 type SquareState =
     // Square where X (cursor) is
-    | MarkedSquare
-    | AttackableSquare
-    | MoveableSquare
-    | NoneSquare
+    | MarkedSquare of unit
+    | AttackableSquare of int
+    | MoveableSquare of int
+    | NoneSquare of unit
 
 (*
 type Square =
@@ -28,11 +28,10 @@ type Square = {
 let setSquareState squareState (s: Square) =
     {s with state = squareState}
 
-let setMarked = setSquareState MarkedSquare
-let setAttackable = setSquareState AttackableSquare
-let setMoveable = setSquareState MoveableSquare
-let setNone = setSquareState NoneSquare
-let setSelected = setSquareState NoneSquare
+let setMarked = setSquareState (MarkedSquare ())
+let setAttackable damage = setSquareState (AttackableSquare damage)
+let setMoveable movementCost = setSquareState (MoveableSquare movementCost)
+let setNone = setSquareState (NoneSquare ())
 
 type ShowState =
     | ShowEntities
@@ -50,14 +49,14 @@ type World () as this =
             {
                 field = Fields.getFieldFromKind fk
                 entity = Some (Entities.createEntityFromKind team tk)
-                state = NoneSquare
+                state = NoneSquare ()
                 cursor = false
             }
         | EmptyKind fk ->
             {
                 field = Fields.getFieldFromKind fk
                 entity = None
-                state = NoneSquare
+                state = NoneSquare ()
                 cursor = false
             }
 
@@ -89,9 +88,9 @@ type World () as this =
             _map
             |> Array2D.iteri (fun y x square ->
                                 match square with
-                                | {state = MoveableSquare}
-                                | {state = AttackableSquare}
-                                | {state = MarkedSquare} ->
+                                | {state = MoveableSquare _}
+                                | {state = AttackableSquare _}
+                                | {state = MarkedSquare _} ->
                                     this.[x, y] <- square |> setNone
                                 | _ -> ())
 
@@ -99,8 +98,8 @@ type World () as this =
             _map
             |> Array2D.iteri (fun y x square ->
                                 match square with
-                                | {state = MoveableSquare}
-                                | {state = AttackableSquare} ->
+                                | {state = MoveableSquare _}
+                                | {state = AttackableSquare _} ->
                                     this.[x, y] <- square |> setNone
                                 | _ -> ())
 
@@ -110,7 +109,7 @@ type World () as this =
                 _map
                 |> Array2D.indexed
                 |> Array2D.toList
-                |> List.find (fun (_, s) -> s.state = MarkedSquare)
+                |> List.find (fun (_, s) -> s.state = MarkedSquare ())
 
             ((x, y), square)
 
@@ -120,11 +119,11 @@ type World () as this =
         | Some e ->
             match s.state with
             // Unselect if marked
-            | MarkedSquare ->
+            | MarkedSquare _ ->
                 unsetAllSquares ()
 
             // Attack here and set states back
-            | AttackableSquare ->
+            | AttackableSquare _ ->
                 let (attackerPos, attackerSquare) =
                     getMarkedSquare ()
 
@@ -155,7 +154,7 @@ type World () as this =
                 unsetAllSquares ()
             
             // Check entity, if moveable set marked.
-            | NoneSquare when e.Team = Friendly ->
+            | NoneSquare _ when e.Team = Friendly ->
                 unsetAllSquares ()
 
                 match box e with
@@ -172,7 +171,7 @@ type World () as this =
                                 Movement.MovementCostForTerrain e'.MovementType s'.field.kind)
 
                     Movement.possibleMoves costMap pos e'.MovementPoints
-                    |> List.iter (fun (squarePos, _) -> this.[squarePos] <- this.[squarePos] |> setMoveable)
+                    |> List.iter (fun (squarePos, _) -> this.[squarePos] <- this.[squarePos] |> setMoveable 0)
 
                     this.[pos] <- s |> setMarked
 
@@ -183,11 +182,11 @@ type World () as this =
         | None ->
             match s.state with
             // Move to there
-            | MoveableSquare ->
+            | MoveableSquare _ ->
                 let (fromPos, fromSquare) =
                     getMarkedSquare ()
 
-                this.[fromPos] <- {fromSquare with entity = None; state = NoneSquare}
+                this.[fromPos] <- {fromSquare with entity = None; state = NoneSquare ()}
                 this.[pos] <- {s with entity = fromSquare.entity} 
 
                 unsetAttMove ()
@@ -217,10 +216,10 @@ type World () as this =
 
                     if attackablePositions |> (List.isEmpty >> not)  then
                         attackablePositions
-                        |> List.iter (fun p -> this.[p] <- this.[p] |> setAttackable)
+                        |> List.iter (fun p -> this.[p] <- this.[p] |> setAttackable 0)
 
                         // Set the new positions as marked, as we can attack.
-                        this.[pos] <- {this.[pos] with state = MarkedSquare} 
+                        this.[pos] <- {this.[pos] with state = MarkedSquare ()} 
                     else
                         ()
 
@@ -264,7 +263,7 @@ type World () as this =
             match s.entity with
             | Some e ->
                 match s.state with
-                | MarkedSquare -> Some "M"
+                | MarkedSquare _ -> Some "M"
                 | _ ->
                     match s.cursor with
                     | true -> Some "X"
@@ -289,7 +288,7 @@ type World () as this =
             match s.entity with
             | Some e ->
                 match s.state with
-                | MarkedSquare -> Some ConsoleColor.White
+                | MarkedSquare _ -> Some ConsoleColor.White
                 | _ when s.cursor -> Some ConsoleColor.White
                 | _ ->
                     match showState with
@@ -301,14 +300,14 @@ type World () as this =
 
             | None ->
                 match s.state with
-                | MarkedSquare -> Some ConsoleColor.White
+                | MarkedSquare _ -> Some ConsoleColor.White
                 | _ when s.cursor -> Some ConsoleColor.White
                 | _ -> s.field.fgcol
 
         let getBackgroundColor (s: Square) =
             match s.state with
-            | MoveableSquare -> ConsoleColor.Magenta
-            | AttackableSquare -> ConsoleColor.DarkMagenta
+            | MoveableSquare _ -> ConsoleColor.Magenta
+            | AttackableSquare _ -> ConsoleColor.DarkMagenta
             | _ -> s.field.bgcol
 
         let draw x y s =
