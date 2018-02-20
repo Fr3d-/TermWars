@@ -81,6 +81,17 @@ type World () as this =
     do
         this.UpdateAll ()
 
+    member __.TryGetMarkedSquare () =
+        let markedSquare =
+            _map
+            |> Array2D.indexed
+            |> Array2D.toList
+            |> List.tryFind (fun (_, s) -> s.state = MarkedSquare ())
+        
+        // Flip coordinates
+        markedSquare
+        |> Option.bind (fun ((y, x), square) -> Some ((x, y), square))
+
 
 
     member this.Select (pos : Position) =
@@ -103,15 +114,9 @@ type World () as this =
                                     this.[x, y] <- square |> setNone
                                 | _ -> ())
 
-
         let getMarkedSquare () =
-            let ((y, x), square) =
-                _map
-                |> Array2D.indexed
-                |> Array2D.toList
-                |> List.find (fun (_, s) -> s.state = MarkedSquare ())
-
-            ((x, y), square)
+            this.TryGetMarkedSquare ()
+            |> Option.get
 
         let s = this.[pos]
 
@@ -130,7 +135,7 @@ type World () as this =
                 let attacker =
                     attackerSquare.entity
                     |> Option.get
-                    |> coerce
+                    |> coerce<ICombat>
                 
                 // We attack
                 let victimDied = 
@@ -171,7 +176,7 @@ type World () as this =
                                 Movement.MovementCostForTerrain e'.MovementType s'.field.kind)
 
                     Movement.possibleMoves costMap pos e'.MovementPoints
-                    |> List.iter (fun (squarePos, _) -> this.[squarePos] <- this.[squarePos] |> setMoveable 0)
+                    |> List.iter (fun (squarePos, cost) -> this.[squarePos] <- this.[squarePos] |> setMoveable cost)
 
                     this.[pos] <- s |> setMarked
 

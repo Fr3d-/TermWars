@@ -31,3 +31,7 @@ module Vec2 =
         let (x2, y2) = v2
 
         ((x1 + x2, y1 + y2) : Position)
+
+
+module Constants =
+    let maxCapturePoints = 18

@@ -5,6 +5,8 @@ open System
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 
+#if INTERACTIVE
+#else
 type OS =
     | Linux
     | MacOS
@@ -100,6 +102,8 @@ let disableTerminalEcho () =
     | Linux
     | MacOS -> disableTerminalEchoLinux ()
     | Windows -> disableTerminalEchoWindows ()
+
+#endif
 
 let draw x y (fg: System.ConsoleColor) (bg:System.ConsoleColor) (symbol: string option) =
     Console.SetCursorPosition (x, y)

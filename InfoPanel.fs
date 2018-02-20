@@ -30,8 +30,14 @@ let fieldColumn : Column =
         sprintf "Defensive Bonus: %i%%" (f.defensiveBonus * 100.0 |> int)
         |> duplet <| None)
 
+    // Movement cost to square
+    |> addRow (fun w ->
+        match (w.Item cursor).state with
+        | MoveableSquare cost ->        
+            sprintf "Movement Cost: %i" cost
+            |> duplet <| None
+        | _ -> ("", None))
 
-    |> addRow (fun x -> ("", None))
     |> addRow (fun x -> ("", None))
     |> List.rev
 
@@ -45,6 +51,8 @@ let entityColumn : Column =
                 match box entity with 
                 | :? ICombat as e ->
                     sprintf "%s (HP: %i)" entity.Name e.Health
+                | :? Base as e ->
+                    sprintf "%s (CP: %i/%i)" entity.Name e.CapturePoints Constants.maxCapturePoints
                 | _ ->
                     sprintf "%s" entity.Name
             
@@ -57,13 +65,43 @@ let entityColumn : Column =
                 match box entity with 
                 | :? ICombat as e ->
                     sprintf "W: %s A: %s" (e.Weapon |> getUnionCaseName) (e.Armor |> getUnionCaseName)
+                | :? Base as e ->
+                    match e.Inhabitant with
+                    | Some inhabitant ->
+                        sprintf "Inhabitant: %s" inhabitant.Name
+                    | None -> ""
                 | _ ->
                     sprintf "%s" entity.Name
             
             infoString
             |> duplet <| (Entities.getTeamColor entity.Team |> Some)
         | None -> ("", None))
-    |> addRow (fun x -> ("", None))
+
+    |> addRow (fun w ->
+        let victimSquare = (w.Item cursor)
+
+        let damage =
+            maybe {
+                let! victimEntity = victimSquare.entity
+                let! victim = tryCoerce<ICombat> victimEntity
+                let! attackerSquare = w.TryGetMarkedSquare ()
+                let! attackerEntity = (snd attackerSquare).entity
+                let! attacker = tryCoerce<ICombat> attackerEntity
+
+                if attackerEntity.Team <> victimEntity.Team then
+                    return
+                        attacker
+                        |> Entities.damageAgainst victim victimSquare.field
+                        |> sprintf "Damage against unit %i"
+
+            }
+
+        match damage with
+        | Some s -> (s, None)
+        | None -> ("", None)
+        )
+
+
     |> addRow (fun x -> ("", None))
     |> List.rev
 

@@ -63,7 +63,7 @@ let possibleMoves (costMap: int [,]) (originalPosition: Position) (movementPoint
 
     // Size of our adjencacy matrix
     let V = pown dim 2
-
+    
     let toVertex ((x, y) : Position) : Graph.Vertex = x + dim * y
     let toPosition (i : Graph.Vertex) : Position = (i % dim, i / dim)
 

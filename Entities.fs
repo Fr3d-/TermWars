@@ -13,6 +13,7 @@ type IMoveable =
     abstract member MovementType: Movement.MovementType
 
 type ICaptureable =
+    abstract member CapturePoints: int
     abstract member Capture: unit -> unit
 
 type ICombat =
@@ -21,24 +22,44 @@ type ICombat =
     abstract member Weapon: Combat.WeaponType
     abstract Health : int with get, set
 
-// Returns a bool indicating if the victim died
-let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
+
+
+let damageAgainst (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
     let attackPower =
         attacker.Weapon
         |> Combat.damageAgainstArmor victim.Armor
         |> (*) 9.0
 
-    let finalAttackPower = ((attackPower - (attackPower * victimTerrain.defensiveBonus)) * (float attacker.Health / 9.0)) |> int
-    victim.Health <- victim.Health - finalAttackPower
+    ((attackPower - (attackPower * victimTerrain.defensiveBonus)) * (float attacker.Health / 9.0))
+    |> int
+
+// Returns a bool indicating if the victim died
+let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
+    let damage = 
+        attacker
+        |> damageAgainst victim victimTerrain
+
+    victim.Health <- victim.Health - damage
 
     // Don't set health below zero
     victim.Health <- max victim.Health 0
 
     victim.Health = 0
 
+type Base (team) =
+    inherit Entity (team)
+
+    override __.Name = "Base"
+    override __.Symbol = "⌂"
+
+    member val Inhabitant : Entity option = None with get
+    member val CapturePoints = 0 with get
+
+
 type Infantry (team) =
     inherit Entity (team)
     
+
     let mutable health = 9
     let mutable canMove = true
 
@@ -128,6 +149,7 @@ let createEntityFromKind team = function
     | Infantry -> (Infantry team :> Entity)
     | Jeep -> (Jeep team :> Entity)
     | Tank -> (Tank team :> Entity)
+    | Base -> (Base team :> Entity)
     | _ -> raise (NotImplementedException ())
 
 let getTeamColor = function
