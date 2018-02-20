@@ -12,9 +12,33 @@ let getUnionCaseName (x:'a) =
 let getUnionCaseNames<'ty> () = 
     FSharpType.GetUnionCases(typeof<'ty>) |> Array.map (fun info -> info.Name)
 
-let coerce value = (box >> unbox) value
+let coerce<'b> value : 'b = (box >> unbox) value
+
+let tryCoerce<'b> o : 'b option =
+    match box o with
+    | :? 'b as b -> Some b
+    | _ -> None 
 
 let duplet a b = (a, b)
+
+module ComputationalExpressions =
+    type MaybeBuilder() =
+        member __.Bind(x, f) = Option.bind f x
+
+        member __.Return(x) = 
+            Some x
+
+        member __.ReturnFrom x = x
+
+        member __.Zero () = None
+
+        member this.Combine (a, b) = 
+            match a with
+            | Some _ -> a  // a succeeds -- use it
+            | None -> b    // a fails -- use b instead
+        
+
+let maybe = ComputationalExpressions.MaybeBuilder ()
 
 module Graph =
     type Vertex = int
