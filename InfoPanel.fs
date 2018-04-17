@@ -107,7 +107,7 @@ let entityColumn : Column =
 
 let lastColumn : Column =
     []
-    |> addRow (fun x -> ("", None))
+    |> addRow (fun w -> ("Day: " + string Rounds.currentRound, None))
     |> addRow (fun x -> ("", None))
     |> addRow (fun x -> ("", None))
     |> addRow (fun x -> ("", None))
