@@ -21,3 +21,6 @@ let Next (world: World) =
     moveables
     |> List.map (fun e -> e.CanMove <- true)
     |> ignore
+
+let NextTurn () =
+    ()

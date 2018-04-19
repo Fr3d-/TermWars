@@ -6,7 +6,7 @@ open System
 open Movement
 
 type SquareState =
-    // Square where X (cursor) is
+    // Square where M (mark) is
     | MarkedSquare of unit
     | AttackableSquare of int
     | MoveableSquare of int
@@ -80,6 +80,11 @@ type World () as this =
 
     do
         this.UpdateAll ()
+    
+    member __.GetAllEntities () =
+        _map
+        |> Array2D.toList
+        |> List.choose (fun x -> x.entity)
 
     member __.TryGetMarkedSquare () =
         let markedSquare =
@@ -93,6 +98,84 @@ type World () as this =
         |> Option.bind (fun ((y, x), square) -> Some ((x, y), square))
 
 
+    member this.MoveEntity (fromPos: Position) (toPos: Position) =
+        match this.[fromPos].entity with
+        | Some e ->
+            match box e with
+            | :? Base as bas when bas.Inhabitant.IsSome ->
+                this.[toPos] <- {this.[toPos] with entity = bas.Inhabitant} 
+                this.[fromPos] <- {this.[fromPos] with state = NoneSquare ()}
+
+                bas.Inhabitant <- None
+                
+            | :? IMoveable as e' when e'.CanMove ->
+                match this.[toPos].entity with
+                | Some toEntity ->
+                    match box toEntity with
+                    | :? Base as bas ->
+                        bas.Inhabitant <- this.[fromPos].entity
+                        this.[fromPos] <- {this.[fromPos] with entity = None; state = NoneSquare ()}
+
+                    | _ -> failwith "Attempting to move to square with invalid entity"
+                | None ->
+                    this.[toPos] <- {this.[toPos] with entity = this.[fromPos].entity} 
+                    this.[fromPos] <- {this.[fromPos] with entity = None; state = NoneSquare ()}
+
+            | _ -> failwith "Entity is not a moveable type or is unable to move"
+        | _ -> failwith "Can't move non existing entity"
+
+    member this.AttackEntity (attackerPos, attackerSquare) (victimPos, victimSquare) =
+        let attacker =
+            attackerSquare.entity
+            |> Option.get
+            |> coerce<ICombat>
+        
+        // We attack
+        let victimDied = 
+            attacker
+            |> Entities.attack (victimSquare.entity |> Option.get |> coerce) victimSquare.field
+
+        if not victimDied then
+            // Let the enemy counter-attack
+            let attackerDied =
+                victimSquare.entity
+                |> Option.get
+                |> coerce
+                |> Entities.attack attacker victimSquare.field
+            
+            if attackerDied then
+                this.[attackerPos] <- { this.[attackerPos] with entity = None}
+        else
+            this.[victimPos] <- { this.[victimPos] with entity = None}
+    
+    member __.GenerateCostMap (moveableEntity: IMoveable) =
+        Array2D.copy _map
+        |> Array2D.map (fun s' ->
+            match s'.entity with
+            // Squares with entities are not moveable
+            | Some entity ->
+                match box entity with
+                | :? Base as bas when bas.Inhabitant.IsNone -> Movement.MovementCostForTerrain moveableEntity.MovementType s'.field.kind
+                | _ -> Movement.NotMoveable
+            | None ->
+                // Get movement cost for terrain
+                Movement.MovementCostForTerrain moveableEntity.MovementType s'.field.kind)
+
+    member __.GetAttackablePositions (attackerPos: Position) (entity: Entity) = 
+        attackerPos
+        // Get all moveable positions according to pattern
+        |> Movement.patternPositions (coerce<ICombat> entity).AttackPattern
+        // Get squares for all positions and removes out of bounds entries
+        |> List.choose (fun ((x, y) as p) ->
+            match Array2D.tryGet _map y x with
+            | Some square -> Some (p, square)
+            | None -> None)
+        // Filter all squares without entites away and unpack entity option
+        |> List.choose (fun (a, b) -> match b.entity with | Some e -> Some (a, e) | None -> None)
+        // Only select enemies
+        |> List.filter (fun (_, e') -> entity.Team <> e'.Team)
+        // Take positions left
+        |> List.map fst
 
     member this.Select (pos : Position) =
         let unsetAllSquares () =
@@ -129,32 +212,7 @@ type World () as this =
 
             // Attack here and set states back
             | AttackableSquare _ ->
-                let (attackerPos, attackerSquare) =
-                    getMarkedSquare ()
-
-                let attacker =
-                    attackerSquare.entity
-                    |> Option.get
-                    |> coerce<ICombat>
-                
-                // We attack
-                let victimDied = 
-                    attacker
-                    |> Entities.attack (s.entity |> Option.get |> coerce) s.field
-
-                if not victimDied then
-                    // Let the enemy counter-attack
-                    let attackerDied =
-                        s.entity
-                        |> Option.get
-                        |> coerce
-                        |> Entities.attack attacker s.field
-                    
-                    if attackerDied then
-                        this.[attackerPos] <- { this.[attackerPos] with entity = None}
-
-                else
-                    this.[pos] <- { this.[pos] with entity = None}
+                this.AttackEntity (getMarkedSquare ()) (pos, s)
 
                 unsetAllSquares ()
             
@@ -165,15 +223,7 @@ type World () as this =
                 match box e with
                 | :? IMoveable as e' when e'.CanMove ->
                     
-                    let costMap =
-                        Array2D.copy _map
-                        |> Array2D.map (fun s' ->
-                            match s'.entity with
-                            // Squares with entities are not moveable
-                            | Some _ -> Movement.NotMoveable
-                            | None ->
-                                // Get movement cost for terrain
-                                Movement.MovementCostForTerrain e'.MovementType s'.field.kind)
+                    let costMap = this.GenerateCostMap e'
 
                     Movement.possibleMoves costMap pos e'.MovementPoints
                     |> List.iter (fun (squarePos, cost) -> this.[squarePos] <- this.[squarePos] |> setMoveable cost)
@@ -181,8 +231,22 @@ type World () as this =
                     this.[pos] <- s |> setMarked
 
                 | _ -> ()
+            
+            | NoneSquare _ -> ()
 
-            | _ -> ()
+            | MoveableSquare _ ->
+                let (fromPos, fromSquare) =
+                    getMarkedSquare ()
+
+                let movingEntity = fromSquare.entity                 
+
+                this.MoveEntity fromPos pos
+
+                // The entity must exist, as we moved it
+                let e =  movingEntity |> Option.get
+                (coerce e : IMoveable).CanMove <- false
+
+                unsetAttMove ()
 
         | None ->
             match s.state with
@@ -191,8 +255,8 @@ type World () as this =
                 let (fromPos, fromSquare) =
                     getMarkedSquare ()
 
-                this.[fromPos] <- {fromSquare with entity = None; state = NoneSquare ()}
-                this.[pos] <- {s with entity = fromSquare.entity} 
+
+                this.MoveEntity fromPos pos
 
                 unsetAttMove ()
 
@@ -202,22 +266,8 @@ type World () as this =
                 (coerce e : IMoveable).CanMove <- false
 
                 match box e with 
-                | :? ICombat as e' ->
-                    let attackablePositions =
-                        pos
-                        // Get all moveable positions according to pattern
-                        |> Movement.patternPositions e'.AttackPattern
-                        // Get squares for all positions and removes out of bounds entries
-                        |> List.choose (fun ((x, y) as p) ->
-                            match Array2D.tryGet _map y x with
-                            | Some square -> Some (p, square)
-                            | None -> None)
-                        // Filter all squares without entites away and unpack entity option
-                        |> List.choose (fun (a, b) -> match b.entity with | Some e -> Some (a, e) | None -> None)
-                        // Only select enemies
-                        |> List.filter (fun (_, e') -> e.Team <> e'.Team)
-                        // Take positions left
-                        |> List.map fst
+                | :? ICombat ->
+                    let attackablePositions = this.GetAttackablePositions pos e
 
                     if attackablePositions |> (List.isEmpty >> not)  then
                         attackablePositions
@@ -225,11 +275,8 @@ type World () as this =
 
                         // Set the new positions as marked, as we can attack.
                         this.[pos] <- {this.[pos] with state = MarkedSquare ()} 
-                    else
-                        ()
-
+                
                 | _ ->
-                    let a =  5
                     ()
 
             | _ -> ()

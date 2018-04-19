@@ -12,17 +12,14 @@ type IMoveable =
     abstract member MovementPoints: int
     abstract member MovementType: Movement.MovementType
 
-type ICaptureable =
-    abstract member CapturePoints: int
-    abstract member Capture: unit -> unit
-
 type ICombat =
     abstract member AttackPattern: Movement.Pattern
     abstract member Armor: Combat.ArmorType
     abstract member Weapon: Combat.WeaponType
     abstract Health : int with get, set
 
-
+type IThink =
+    abstract member Think: unit -> unit
 
 let damageAgainst (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
     let attackPower =
@@ -32,6 +29,16 @@ let damageAgainst (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICo
 
     ((attackPower - (attackPower * victimTerrain.defensiveBonus)) * (float attacker.Health / 9.0))
     |> int
+
+let nettoDamage (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) (attackerTerrain: Fields.Field) =
+    let attackDamage = damageAgainst victim victimTerrain attacker
+
+    if attackDamage < victim.Health then
+        let responseDamage = damageAgainst attacker attackerTerrain victim
+
+        attackDamage - responseDamage
+    else
+        attackDamage
 
 // Returns a bool indicating if the victim died
 let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
@@ -49,10 +56,18 @@ let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =
 type Base (team) =
     inherit Entity (team)
 
+    let mutable inhabitant : Entity option = None
+
     override __.Name = "Base"
     override __.Symbol = "⌂"
 
-    member val Inhabitant : Entity option = None with get
+    member  __.Inhabitant
+        with get () = inhabitant
+        and set (x) =
+            match inhabitant with
+            | Some _ -> failwith "Trying to set inhabitant while inhabitant already exists"
+            | None -> inhabitant <- x
+
     member val CapturePoints = 0 with get
 
 
@@ -150,7 +165,6 @@ let createEntityFromKind team = function
     | Jeep -> (Jeep team :> Entity)
     | Tank -> (Tank team :> Entity)
     | Base -> (Base team :> Entity)
-    | _ -> raise (NotImplementedException ())
 
 let getTeamColor = function
     | Friendly -> ConsoleColor.Yellow

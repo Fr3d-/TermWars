@@ -21,6 +21,12 @@ let tryCoerce<'b> o : 'b option =
 
 let duplet a b = (a, b)
 
+let debugPrint s =
+    System.Diagnostics.Debug.Write <| sprintf "%A" s
+
+
+let trd (_, _, x) = x
+
 module ComputationalExpressions =
     type MaybeBuilder() =
         member __.Bind(x, f) = Option.bind f x
@@ -32,6 +38,7 @@ module ComputationalExpressions =
 
         member __.Zero () = None
 
+        // From F# for fun and profit
         member this.Combine (a, b) = 
             match a with
             | Some _ -> a  // a succeeds -- use it
