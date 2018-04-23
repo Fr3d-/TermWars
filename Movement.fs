@@ -10,6 +10,12 @@ type MovementType =
     | Naval
     | Flying
 
+let distance ((x1, y1): Position) ((x2, y2): Position) =
+    let (x1, y1) = (float x1, float y1)
+    let (x2, y2) = (float x2, float y2)
+
+    (sqrt >> int) ((x1 - x2)**2.0 + (y1 - y2)**2.0)
+
 [<Literal>]
 let NotMoveable = 999
 

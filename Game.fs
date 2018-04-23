@@ -2,7 +2,6 @@ module Game
 
 open World
 open InfoPanel
-open Controls
 
 let world = World ()
 let infopanel = InfoPanel (world)

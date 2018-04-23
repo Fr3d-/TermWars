@@ -3,7 +3,6 @@ module World
 open Fields
 open Entities
 open System
-open Movement
 
 type SquareState =
     // Square where M (mark) is
@@ -64,23 +63,28 @@ type World () as this =
         Parser.parseFile "map.txt"
         |> Array2D.map create
 
-    let getAllSquresWithEntities (m: Square [,]) =
+    let mutable updatedSquares : (int * int) list = []
+
+    do
+        this.UpdateAll ()
+    
+    member __.GetAllPositionsWithEntities () =
         // Array2D coordinates is in (y, x)
         let containsEntity y x (s : Square) =
             match s.entity with
             | Some _ -> Some (x, y)
             | None -> None
 
-        m
+        _map
         |> Array2D.mapi containsEntity
         |> Array2D.toList
         |> List.choose id
 
-    let mutable updatedSquares : (int * int) list = []
+    member this.GetAllPositionsWithTeam team =
+        this.GetAllPositionsWithEntities ()
+        |> List.map (fun pos -> (pos, this.[pos].entity |> Option.get))
+        |> List.filter (fun (_, e) -> e.Team = team)
 
-    do
-        this.UpdateAll ()
-    
     member __.GetAllEntities () =
         _map
         |> Array2D.toList
@@ -99,32 +103,42 @@ type World () as this =
 
 
     member this.MoveEntity (fromPos: Position) (toPos: Position) =
-        match this.[fromPos].entity with
-        | Some e ->
-            match box e with
-            | :? Base as bas when bas.Inhabitant.IsSome ->
-                this.[toPos] <- {this.[toPos] with entity = bas.Inhabitant} 
-                this.[fromPos] <- {this.[fromPos] with state = NoneSquare ()}
+        if fromPos = toPos then
+            (this.[toPos].entity |> Option.get |> coerce<IMoveable>).CanMove <- false
+        else
+            match this.[fromPos].entity with
+            | Some e ->
+                match box e with
+                | :? Base as bas when bas.Inhabitant.IsSome ->
+                    this.[toPos] <- {this.[toPos] with entity = bas.Inhabitant} 
+                    this.[fromPos] <- {this.[fromPos] with state = NoneSquare ()}
 
-                bas.Inhabitant <- None
-                
-            | :? IMoveable as e' when e'.CanMove ->
-                match this.[toPos].entity with
-                | Some toEntity ->
-                    match box toEntity with
-                    | :? Base as bas ->
-                        bas.Inhabitant <- this.[fromPos].entity
+                    // Assuming only moveable entites can be in a base
+                    (bas.Inhabitant |> Option.get |> coerce<IMoveable>).CanMove <- false
+                    bas.Inhabitant <- None
+                    
+                | :? IMoveable as e' when e'.CanMove ->
+                    match this.[toPos].entity with
+                    | Some toEntity ->
+                        match box toEntity with
+                        | :? Base as bas ->
+                            bas.Inhabitant <- this.[fromPos].entity
+                            this.[fromPos] <- {this.[fromPos] with entity = None; state = NoneSquare ()}
+                            e'.CanMove <- false
+
+                        | _ -> failwith "Attempting to move to square with invalid entity"
+                    | None ->
+                        this.[toPos] <- {this.[toPos] with entity = this.[fromPos].entity} 
                         this.[fromPos] <- {this.[fromPos] with entity = None; state = NoneSquare ()}
+                        e'.CanMove <- false
 
-                    | _ -> failwith "Attempting to move to square with invalid entity"
-                | None ->
-                    this.[toPos] <- {this.[toPos] with entity = this.[fromPos].entity} 
-                    this.[fromPos] <- {this.[fromPos] with entity = None; state = NoneSquare ()}
+                | _ -> failwith "Entity is not a moveable type or is unable to move"
+            | _ -> failwith "Can't move non existing entity"
 
-            | _ -> failwith "Entity is not a moveable type or is unable to move"
-        | _ -> failwith "Can't move non existing entity"
+    member this.AttackEntity attackerPos victimPos =
+        let attackerSquare = this.[attackerPos]
+        let victimSquare = this.[victimPos]
 
-    member this.AttackEntity (attackerPos, attackerSquare) (victimPos, victimSquare) =
         let attacker =
             attackerSquare.entity
             |> Option.get
@@ -212,7 +226,7 @@ type World () as this =
 
             // Attack here and set states back
             | AttackableSquare _ ->
-                this.AttackEntity (getMarkedSquare ()) (pos, s)
+                this.AttackEntity ((getMarkedSquare >> fst) ()) pos
 
                 unsetAllSquares ()
             
@@ -234,6 +248,7 @@ type World () as this =
             
             | NoneSquare _ -> ()
 
+            // Since there's an entity on this square, we're probably moving into a base.
             | MoveableSquare _ ->
                 let (fromPos, fromSquare) =
                     getMarkedSquare ()
@@ -241,10 +256,6 @@ type World () as this =
                 let movingEntity = fromSquare.entity                 
 
                 this.MoveEntity fromPos pos
-
-                // The entity must exist, as we moved it
-                let e =  movingEntity |> Option.get
-                (coerce e : IMoveable).CanMove <- false
 
                 unsetAttMove ()
 
@@ -255,15 +266,12 @@ type World () as this =
                 let (fromPos, fromSquare) =
                     getMarkedSquare ()
 
-
                 this.MoveEntity fromPos pos
 
                 unsetAttMove ()
 
                 // The entity must exist, as we moved it
                 let e = fromSquare.entity |> Option.get
-
-                (coerce e : IMoveable).CanMove <- false
 
                 match box e with 
                 | :? ICombat ->
@@ -283,8 +291,8 @@ type World () as this =
 
     member __.GetMap = updatedSquares
 
-    member __.UpdateAllEntities () =
-        updatedSquares <- (getAllSquresWithEntities _map) @ updatedSquares
+    member this.UpdateAllEntities () =
+        updatedSquares <- (this.GetAllPositionsWithEntities ()) @ updatedSquares
     member __.UpdateAll () =
         _map
         |> Array2D.iteri (fun y x _ -> updatedSquares <- (x, y) :: updatedSquares)

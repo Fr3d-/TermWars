@@ -19,8 +19,9 @@ let Next (world: World) =
             | _ -> None)
 
     moveables
-    |> List.map (fun e -> e.CanMove <- true)
-    |> ignore
+    |> List.iter (fun e -> e.CanMove <- true)
+
+    currentRound <- currentRound + 1
 
 let NextTurn () =
     ()

@@ -24,6 +24,7 @@ let duplet a b = (a, b)
 let debugPrint s =
     System.Diagnostics.Debug.Write <| sprintf "%A" s
 
+let toList x = [x]
 
 let trd (_, _, x) = x
 
@@ -43,6 +44,25 @@ module ComputationalExpressions =
             match a with
             | Some _ -> a  // a succeeds -- use it
             | None -> b    // a fails -- use b instead
+
+    type ReturnFirstBuilder () =
+        member __.ReturnFrom(x) = 
+            x
+
+        member __.Zero() = 
+            None
+
+        member __.Combine (m,f) = 
+            match m with
+            | Some _ -> m
+            | None -> f ()
+
+
+        member __.Run(f) = 
+            f ()
+
+        member __.Delay(f) = 
+            f
         
 
 let maybe = ComputationalExpressions.MaybeBuilder ()

@@ -30,15 +30,15 @@ let damageAgainst (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICo
     ((attackPower - (attackPower * victimTerrain.defensiveBonus)) * (float attacker.Health / 9.0))
     |> int
 
-let nettoDamage (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) (attackerTerrain: Fields.Field) =
+let damageInfo (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) (attackerTerrain: Fields.Field) =
     let attackDamage = damageAgainst victim victimTerrain attacker
 
     if attackDamage < victim.Health then
         let responseDamage = damageAgainst attacker attackerTerrain victim
 
-        attackDamage - responseDamage
+        (attackDamage, responseDamage)
     else
-        attackDamage
+        (attackDamage, 0)
 
 // Returns a bool indicating if the victim died
 let attack (victim: ICombat) (victimTerrain: Fields.Field) (attacker: ICombat) =

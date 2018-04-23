@@ -25,7 +25,7 @@ let handleControl (world : World.World) keyOpt =
             match key with
             | 'h' | 'j' | 'k' | 'l' -> updatePosition world key
             | 'x' -> world.Select cursor
-            | 'n' -> Rounds.Next world
+            | 'n' -> AI.DoBestMoves world; Rounds.Next world
             | _ -> ()
         | None -> ()
         
